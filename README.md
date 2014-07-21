@@ -26,6 +26,6 @@ General flow:
   
 Resources that helped:
 
-    - http://blog.flirble.org/2011/01/05/rsa-public-key-openssl-ios/
-    - http://blog.wingsofhermes.org/?p=42
-    - http://blog.wingsofhermes.org/?p=75
+- http://blog.flirble.org/2011/01/05/rsa-public-key-openssl-ios/
+- http://blog.wingsofhermes.org/?p=42
+- http://blog.wingsofhermes.org/?p=75
