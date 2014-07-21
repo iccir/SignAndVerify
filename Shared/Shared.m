@@ -204,37 +204,51 @@ static NSData *sGetDataByStrippingHeader(NSData *data)
     NSUInteger length = [data length];
     if (!length) return nil;
 
-    UInt8 *bytes = (UInt8 *)[data bytes];
+    const void *bytes = [data bytes];
     NSUInteger index = 0;
+
+    UInt8 (^getByte)(NSUInteger) = ^(NSUInteger i) {
+        UInt8 result = 0;
+
+        if (i < length) {
+            result = ((UInt8 *)bytes)[i];
+        }
+        
+        return result;
+    };
     
-    if (bytes[index++] != 0x30) {
+    if (getByte(index++) != 0x30) {
         return nil;
     }
 
-    if (bytes[index] > 0x80) {
-        index += bytes[index] - 0x80 + 1;
+    if (getByte(index) > 0x80) {
+        index += getByte(index) - 0x80 + 1;
     } else {
         index++;
     }
 
     // PKCS #1 rsaEncryption szOID_RSA_RSA
     static unsigned char seqiod[] = { 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00 };
-    if (memcmp(&bytes[index], seqiod, 15)) return(nil);
+    if ((index + 15) >= length) {
+        return nil;
+    }
+
+    if (memcmp(&bytes[index], seqiod, 15)) return nil;
 
     index += 15;
 
-    if (bytes[index++] != 0x03) return nil;
+    if (getByte(index++) != 0x03) return nil;
 
-    if (bytes[index] > 0x80) {
-        index += bytes[index] - 0x80 + 1;
+    if (getByte(index) > 0x80) {
+        index += getByte(index) - 0x80 + 1;
     } else {
         index++;
     }
 
-    if (bytes[index++] != '\0') return nil;
+    if (getByte(index++) != '\0') return nil;
 
     // Now make a new NSData from this buffer
-    return [NSData dataWithBytes:&bytes[index] length:(length - index)];
+    return (index < length) ? [NSData dataWithBytes:&bytes[index] length:(length - index)] : nil;
 }
 
 
@@ -286,6 +300,8 @@ static NSData *sExtractKey(NSString *inString)
 {
     NSError  *error     = nil;
     NSString *contents  = [NSString stringWithContentsOfFile:keyPath encoding:NSUTF8StringEncoding error:&error];
+
+    SecKeyRef keyRef = nil;
     
     NSData   *keyData   = sExtractKey(contents);
 
@@ -296,7 +312,8 @@ static NSData *sExtractKey(NSString *inString)
     [dictionary setObject:(__bridge id)kSecClassKey       forKey:(__bridge id)kSecClass];
     [dictionary setObject:(__bridge id)kSecAttrKeyTypeRSA forKey:(__bridge id)kSecAttrKeyType];
     [dictionary setObject:tagAsData                       forKey:(__bridge id)kSecAttrApplicationTag];
-    err = SecItemDelete((__bridge CFDictionaryRef)dictionary);
+
+    SecItemDelete((__bridge CFDictionaryRef)dictionary);
 
     [dictionary setObject:keyData                              forKey:(__bridge id)kSecValueData];
     [dictionary setObject:(__bridge id)kSecAttrKeyClassPrivate forKey:(__bridge id)kSecAttrKeyClass];
@@ -308,12 +325,10 @@ static NSData *sExtractKey(NSString *inString)
     }
 
     // Now fetch the SecKeyRef version of the key
-    SecKeyRef keyRef = nil;
-
     [dictionary removeObjectForKey:(__bridge id)kSecValueData];
     [dictionary setObject:@YES forKey:(__bridge id)kSecReturnRef];
 
-    err = SecItemCopyMatching((__bridge CFDictionaryRef)dictionary, (CFTypeRef *)&keyRef);
+    SecItemCopyMatching((__bridge CFDictionaryRef)dictionary, (CFTypeRef *)&keyRef);
 
     return keyRef;
 }
@@ -386,7 +401,7 @@ static NSData *sExtractKey(NSString *inString)
     [publicKey setObject:(__bridge id)kSecClassKey       forKey:(__bridge id)kSecClass];
     [publicKey setObject:(__bridge id)kSecAttrKeyTypeRSA forKey:(__bridge id)kSecAttrKeyType];
     [publicKey setObject:tagAsData                       forKey:(__bridge id)kSecAttrApplicationTag];
-    err = SecItemDelete((__bridge CFDictionaryRef)publicKey);
+    SecItemDelete((__bridge CFDictionaryRef)publicKey);
 
     [publicKey setObject:keyData                             forKey:(__bridge id)kSecValueData];
     [publicKey setObject:(__bridge id)kSecAttrKeyClassPublic forKey:(__bridge id)kSecAttrKeyClass];
@@ -403,7 +418,7 @@ static NSData *sExtractKey(NSString *inString)
     [publicKey removeObjectForKey:(__bridge id)kSecValueData];
     [publicKey setObject:@YES forKey:(__bridge id)kSecReturnRef];
 
-    err = SecItemCopyMatching((__bridge CFDictionaryRef)publicKey, (CFTypeRef *)&keyRef);
+    SecItemCopyMatching((__bridge CFDictionaryRef)publicKey, (CFTypeRef *)&keyRef);
 
     return keyRef;
 }
