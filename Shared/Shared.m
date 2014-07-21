@@ -198,6 +198,7 @@ NSString *DoTest(NSString *privateKeyPath, NSString *publicKeyPath, NSString *te
 
 #pragma mark - iOS Implementations
 
+// From http://blog.flirble.org/2011/01/05/rsa-public-key-openssl-ios/
 static NSData *sGetDataByStrippingHeader(NSData *data)
 {
     NSUInteger length = [data length];
@@ -466,7 +467,8 @@ static NSData *sExtractKey(NSString *inString)
 {
     CFErrorRef error;
     SecTransformRef signer = SecSignTransformCreate(_privateKey, &error);
-
+    CFTypeRef cfResult = NULL;
+    
     SecTransformSetAttribute(signer, kSecPaddingKey, kSecPaddingPKCS1Key, &error);
     if (error) goto bail;
 
@@ -484,11 +486,15 @@ static NSData *sExtractKey(NSString *inString)
         if (error) goto bail;
     }
 
-    CFTypeRef cfResult = SecTransformExecute(signer, &error);
+    cfResult = SecTransformExecute(signer, &error);
 
 bail:
     if (error) {
         NSLog(@"Error: %@", error);
+    }
+
+    if (signer) {
+        CFRelease(signer);
     }
 
     return CFBridgingRelease(cfResult);
@@ -550,31 +556,35 @@ bail:
     CFErrorRef error;
     id result;
 
-    SecTransformRef signer = SecVerifyTransformCreate(_publicKey, (__bridge CFDataRef)signature, &error);
+    SecTransformRef verifier = SecVerifyTransformCreate(_publicKey, (__bridge CFDataRef)signature, &error);
     if (error) goto bail;
 
-    SecTransformSetAttribute(signer, kSecPaddingKey, kSecPaddingPKCS1Key, &error);
+    SecTransformSetAttribute(verifier, kSecPaddingKey, kSecPaddingPKCS1Key, &error);
     if (error) goto bail;
 
-    SecTransformSetAttribute(signer, kSecInputIsAttributeName, kSecInputIsDigest, &error);
+    SecTransformSetAttribute(verifier, kSecInputIsAttributeName, kSecInputIsDigest, &error);
     if (error) goto bail;
 
-    SecTransformSetAttribute(signer, kSecTransformInputAttributeName, (__bridge CFDataRef)hash, &error);
+    SecTransformSetAttribute(verifier, kSecTransformInputAttributeName, (__bridge CFDataRef)hash, &error);
     if (error) goto bail;
 
-    SecTransformSetAttribute(signer, kSecDigestTypeAttribute, digestType, &error);
+    SecTransformSetAttribute(verifier, kSecDigestTypeAttribute, digestType, &error);
     if (error) goto bail;
     
     if (digestLength) {
-        SecTransformSetAttribute(signer, kSecDigestLengthAttribute,   (__bridge CFNumberRef)@(digestLength), &error);
+        SecTransformSetAttribute(verifier, kSecDigestLengthAttribute,   (__bridge CFNumberRef)@(digestLength), &error);
         if (error) goto bail;
     }
 
-    result = CFBridgingRelease(SecTransformExecute(signer, &error));
+    result = CFBridgingRelease(SecTransformExecute(verifier, &error));
     
 bail:
     if (error) {
         NSLog(@"Error: %@", error);
+    }
+
+    if (verifier) {
+        CFRelease(verifier);
     }
 
     if ([result respondsToSelector:@selector(boolValue)]) {
